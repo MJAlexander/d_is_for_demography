@@ -1,0 +1,555 @@
+---
+title: "D is for Demography"
+author: "Monica Alexander"
+geometry: paperheight=4.6in,paperwidth=5.7in,margin=1in
+mainfont: Helvetica
+header-includes:
+  - \pagenumbering{gobble} 
+output:
+    pdf_document:
+      latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, dev="cairo_pdf", message = FALSE, warning = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(LexisPlotR)
+library(readxl)
+library(here)
+library(janitor)
+library(kableExtra)
+```
+
+
+\centering
+
+# A is for Age
+```{r}
+lexis_grid(year_start = 1970, year_end = 2020, age_start = 0, age_end = 50, delta = 5) %>%
+  lexis_age(age = 30, delta = 5)
+```
+
+
+
+# B is for Births
+
+```{r}
+births <- read_xlsx("data/WPP2019_FERT_F01_BIRTHS_BOTH_SEXES.xlsx", skip = 16)
+births <- births %>% 
+  select(`Region, subregion, country or area *`, `1950-1955`:`2015-2020`) %>% 
+  rename(region = `Region, subregion, country or area *`) %>% 
+  pivot_longer(-region, names_to = "period", values_to = "births") %>% 
+  mutate(births = as.numeric(births)) %>% 
+  mutate(year = as.numeric(str_sub(period, 1, 4))+2.5)
+
+births %>% 
+  filter(region %in% c("Australia", "Canada")) %>% 
+  ggplot(aes(year, births, color = region)) + 
+  geom_point() + geom_line(lwd = 1.3) + 
+  theme_bw(base_size = 14) + 
+  #ggtitle("Births in Australia and Canada") + 
+  scale_color_brewer(palette = "Set1", name = "country")+
+  labs(caption = "Data from WPP 2019")
+```
+
+
+# C is for Cohort
+
+```{r}
+lexis_grid(year_start = 1970, year_end = 2020, age_start = 0, age_end = 50, delta = 5) %>%
+  lexis_cohort(cohort = 1970, delta = 5)
+```
+
+
+# D is for Demography!
+
+\includegraphics{fig/demogseal2.png}
+
+
+\newpage
+
+# E is for Euler-Lotka equation
+
+\vspace{10mm}
+
+\Huge
+$$
+1 = \int e^{-ra}l(a)f(a)da
+$$
+
+# F is for fertility
+
+```{r}
+pop_female <- readxl::read_xlsx(here("data/WPP2019_POP_F07_3_POPULATION_BY_AGE_FEMALE.xlsx"), sheet = 1, skip = 16)
+pop_male <- readxl::read_xlsx(here("data/WPP2019_POP_F07_2_POPULATION_BY_AGE_MALE.xlsx"), sheet = 1, skip = 16)
+pop_female$sex <- "F"
+pop_male$sex <- "M"
+pop <- bind_rows(pop_female, pop_male)
+
+rm(pop_female, pop_male) # remove the sex-specific copies
+
+# clean up a little and make into a long tibble. we need to make the last age group 95+ to match with deaths
+
+pop <- pop %>% 
+  rename(location = `Region, subregion, country or area *`,
+         year = `Reference date (as of 1 July)`) %>% 
+  select(location, year,sex,  `0-4`:`100+`) %>% 
+  mutate_at(.vars = vars(`0-4`:`100+`), .funs = funs(as.numeric(.))) %>% 
+  mutate(`95+` = `95-99`+ `100+`) %>% 
+  select(-(`95-99`:`100+`)) %>% 
+  pivot_longer(`0-4`:`95+`, names_to = "age_group", values_to = "population")
+
+```
+
+
+```{r}
+age_groups <- unique(pop$age_group) # get all the unique age groups. these are in the order we want
+
+pop <- pop %>% 
+  mutate(age_group = factor(age_group, levels = age_groups))
+
+pop %>% 
+  filter(location %in% c("Japan", "Nigeria"), year %in% c(2015)) %>%
+  group_by(location, year) %>% 
+  mutate(location = ifelse(location == "Nigeria", "Nigeria (high fertility)", "Japan (low fertility)")) %>% 
+  mutate(proportion = population/sum(population)) %>% 
+  mutate(proportion=ifelse(sex=="M", -proportion, proportion)) %>% 
+ggplot(aes(x = age_group, y = proportion, fill = sex)) + 
+  facet_grid(.~location)+
+  geom_bar(stat="identity")+
+  ylab("Proportion of population")+
+  xlab("Age group") +
+  coord_flip() + 
+  scale_y_continuous(breaks = seq(-.1, .1, 0.05), 
+                     labels = c(seq(.1, 0, -0.05), seq(0.05, .1, 0.05))) + 
+  scale_fill_brewer(palette = "Set1") +
+  theme_bw(base_size = 14) 
+```
+
+# G is for Gompertz mortality
+
+```{r}
+d <- read_table(here("data/AUS_Mx_1x1.txt"), skip = 2, col_types = 'dcddd')
+
+# tidy up 
+d <- d %>% 
+  clean_names() %>% 
+  mutate(age = as.numeric(ifelse(age=="110+", "110", age))) %>% 
+  filter(age<101) %>% # older ages problematic in earlier years
+  pivot_longer(female:total, names_to = "sex", values_to = "mx")
+
+d_gomp <- d %>% 
+  filter(age>29) %>% 
+  mutate(log_mx = log(mx)) %>% 
+  group_by(year, sex) %>% 
+  summarise(alpha = exp(coef(lm(log_mx~age))[1]),
+            beta = coef(lm(log_mx~age))[2])
+d_gomp %>% 
+  pivot_longer(alpha:beta, names_to = "parameter", values_to = "value") %>% 
+  filter(sex!='total') %>% 
+  ggplot(aes(year, value, color = sex)) + geom_point() + 
+  facet_wrap(~parameter, scales = "free_y") + 
+  scale_color_brewer(palette = "Set1") + 
+  theme_bw(base_size = 14)+
+  labs(title = "Gompertz parameters for Australian males", caption = "Data from HMD")
+```
+
+
+\newpage
+# H is for Hutterites
+
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{l|r}
+Age & $n(x)$ \\ \hline
+15  & 0.36   \\
+20  & 0.46   \\
+25  & 0.431  \\
+30  & 0.396  \\
+35  & 0.321  \\
+40  & 0.167  \\
+45  & 0.024 
+\end{tabular}
+\end{table}
+
+\tiny
+Data reproduced from Wachter 2014
+
+# I is for Immigration
+\vspace{-2mm}
+\includegraphics[width = 0.8\textwidth]{fig/pr_state.png}
+
+# J is for 'J-shape' mortality
+
+
+```{r}
+d <- read_table(here("data/AUS_Mx_1x1.txt"), skip = 2, col_types = 'dcddd')
+
+# tidy up 
+d <- d %>% 
+  clean_names() %>% 
+  mutate(age = as.numeric(ifelse(age=="110+", "110", age))) %>% 
+  filter(age<101) %>% # older ages problematic in earlier years
+  pivot_longer(female:total, names_to = "sex", values_to = "mx")
+
+d %>% 
+  filter(year %in% seq(1955, 2015, by = 10), sex=="male") %>% 
+  ggplot(aes(age, mx, color = factor(year))) + 
+  geom_line(lwd = 1.3) + 
+  scale_color_viridis_d(name = "year")+
+  scale_y_log10() + 
+  labs(title = "Age-specific mortality, Males, Australia", caption = "Data from HMD") + 
+  theme_bw(base_size = 14)
+```
+
+# K is for Keyfitz momentum
+
+```{r}
+df <- read_xlsx(here("data", "WPP2019_FERT_F07_AGE_SPECIFIC_FERTILITY.xlsx"), skip = 16)
+
+df <- df %>% 
+  rename(region = `Region, subregion, country or area *`, period = Period) %>% 
+  select(region, period, `15-19`:`45-49`) %>% 
+  pivot_longer(-(region:period), names_to = "age", values_to = "Fx") %>% 
+  mutate(year = as.numeric(substr(period, 1, 4)), 
+         age = as.numeric(substr(age, 1, 2)),
+         Fx = as.numeric(Fx)) %>% 
+  mutate(age = as.numeric(age), Fx = Fx/1000)
+
+dl <- read_xlsx(here("data", "WPP2019_MORT_F17_3_ABRIDGED_LIFE_TABLE_FEMALE.xlsx"), skip = 16)
+
+dl <- dl %>% 
+  rename(region = `Region, subregion, country or area *`,
+         Lx = `Number of person-years lived L(x,n)`,
+         age = `Age (x)`,
+         period = Period) %>% 
+  select(region, period, age, Lx) %>% 
+  mutate(year = as.numeric(substr(period, 1, 4)), Lx = as.numeric(Lx)/10^5)
+
+nLx <- dl %>% 
+  left_join(df) %>% 
+  filter(year==2010, region == "Canada", age<85) %>% 
+  select(Lx) %>% pull()
+
+## need to fix first age group
+
+nLx <- c(sum(nLx[1:2]), nLx[3:length(nLx)])
+
+nFx <- dl %>% 
+  left_join(df) %>% 
+  filter(year==2010, region == "Canada") %>% 
+  mutate(Fx = ifelse(is.na(Fx), 0, Fx)) %>% 
+  select(Fx) %>% pull()
+nFx <- nFx[-1]
+
+NRR <- sum(nFx*nLx*0.4886)
+de <- read_xlsx(here("data", "WPP2019_MORT_F17_3_ABRIDGED_LIFE_TABLE_FEMALE.xlsx"), skip = 16)
+
+ex <- de %>% 
+  rename(region = `Region, subregion, country or area *`,
+         ex = `Expectation of life e(x)`,
+         age = `Age (x)`,
+         period = Period) %>% 
+  select(region, period, age, ex) %>% 
+  mutate(year = as.numeric(substr(period, 1, 4)), ex = as.numeric(ex)) %>% 
+  filter(region == "Canada", age==0, year==2010) %>% 
+  select(ex) %>% 
+  pull()
+
+
+
+d_female <- read_xlsx(here("data", "WPP2019_POP_F07_3_POPULATION_BY_AGE_FEMALE.xlsx"), skip = 16)
+
+Kt <- d_female %>% 
+  rename(region = `Region, subregion, country or area *`,
+         year = `Reference date (as of 1 July)`) %>% 
+  select(-Index, -Variant, -Notes, -`Country code`) %>% 
+  filter(region=="Canada", year==2010) %>% 
+  pivot_longer(`0-4`:`100+`, names_to = "age", values_to = "pop") %>% 
+  rowwise() %>% 
+  mutate(age = as.numeric(str_split(age, "-")[[1]][1])) %>% 
+  filter(age<85) %>% 
+  mutate(pop = as.numeric(pop)) %>% 
+  select(pop) %>% 
+  pull()
+
+
+leslie <- function(nLx,
+                   nFx, 
+                   n_age_groups=17,
+                   ffab = 0.4886){
+  L = matrix(0, nrow = n_age_groups, ncol = n_age_groups)
+  L[1,] = ffab * nLx[1]*(nFx[1:n_age_groups]+nFx[2:(n_age_groups+1)]*nLx[2:(n_age_groups+1)]/nLx[1:n_age_groups])/2 # top row 
+  L[1,ncol(L)] <- 0
+  diag(L[2:n_age_groups,1:(n_age_groups-1)]) = nLx[2:n_age_groups] / nLx[1:(n_age_groups-1)] # subdiagonal
+  return(L)
+}
+
+A <- leslie(nLx, nFx)
+eigen_A <- eigen(A)
+r_A <- log(Re(eigen_A$value[1]))/5 
+b_pre <- 1/sum(exp(-r_A*seq(0, 80, by = 5))*nLx)
+NRR <- sum(nFx*nLx*0.4886)
+#ex*b_pre/sqrt(NRR)
+
+B <- rbind(A[1,]/NRR, A[-1,])
+
+age_groups <- seq(0, 80, by = 5)
+n_age_groups <-  length(age_groups)
+n_projections <- 40
+K <- matrix(0, nrow = n_age_groups, ncol = n_projections+1)
+K[,1] <- Kt[1:n_age_groups]
+
+# do the projection!
+for(i in 2:(n_projections+1)){
+  K[,i] <- B%*%K[,i-1] 
+}
+
+Kdf <- as_tibble(K)
+colnames(Kdf) <- seq(from = 2010, to = (2010+n_projections*5), by = 5)
+Kdf <- cbind(age = seq(from = 0, to = 80, by = 5), Kdf)
+
+# get in long format and then add proportion of population in each age group
+dk <- Kdf %>% 
+  gather(year, population, -age) %>%
+  mutate(year = as.numeric(year)) %>% 
+  group_by(year) %>%
+  mutate(proportion = population/sum(population))
+
+dk %>% 
+  group_by(year) %>% 
+  summarise(pop = sum(population)) %>% 
+  ggplot(aes(year, pop)) + 
+  geom_line(lwd = 1.3) + 
+  labs(title = "Population over time if NRR went to 1 in 2010", subtitle = "Canada 2010-2250", caption = "Data from WPP 2019") + ylab("population") + theme_bw(base_size = 14)
+
+```
+
+# L is for Life expectancy
+
+\includegraphics{fig/oeppen_vaupel.jpg}
+\tiny
+From Oeppen and Vaupel (2002)
+
+# M is for Mortality
+
+\includegraphics{fig/opioid_race.png}
+\tiny
+From https://github.com/MJAlexander/opioid-mcd
+
+
+# N is for Net Reproduction Ratio
+
+```{r}
+ffab <- 0.4886
+
+df %>% 
+  left_join(dl) %>% 
+  mutate(prod = Fx*Lx*ffab) %>% 
+  group_by(region, year) %>% 
+  summarise(NRR = sum(prod)) %>% 
+  filter(region %in% c("Peru", "Pakistan", "Mozambique", "Canada", "Australia")) %>% 
+  ggplot(aes(year, NRR, color = region)) +
+  geom_line(lwd = 1.3) + 
+  theme_bw(base_size = 14)+
+  scale_color_viridis_d(name = "Country")
+```
+
+# O is for Old-age dependency ratio
+
+```{r}
+pop %>% 
+  filter(location %in% c("Australia", "Indonesia")) %>% 
+  rowwise() %>% 
+  mutate(age = as.numeric(str_split(age_group, "-")[[1]][1])) %>% 
+  filter(age>10) %>% 
+  mutate(old = ifelse(age>60, 1, 0)) %>% 
+  group_by(location, year) %>% 
+  summarize(OADR = sum(population[old==1])/sum(population[old==0])) %>%  
+  ggplot(aes(year, OADR, color = location)) + geom_line(lwd = 1.3) + 
+  theme_bw(base_size = 14) + 
+  scale_color_brewer(palette = "Set1", name = "Country")+
+  labs(caption = "Data from WPP 2019")
+```
+
+
+# P is for Parity 
+
+```{r}
+ppr <- read_table(here("data", "CANpprVHbo.txt"), skip = 2)
+ppr <- ppr %>% 
+  gather(measure, ratio, -Cohort) %>% 
+  mutate(parity =  as.numeric(substr(measure, 6, 6))) %>% 
+  rename(cohort = Cohort) %>% 
+  select(-measure)
+ppr %>% 
+  mutate(parity = factor(parity)) %>% 
+  ggplot(aes(cohort, ratio, color = parity)) + 
+  geom_line(lwd = 1.1) + 
+  scale_color_viridis_d() + 
+  ylab("PPR") + 
+  theme_gray(base_size = 14) + 
+  labs(title = "Parity Progression Ratios in Canada", caption = "Data from HFD") +
+  theme_bw(base_size = 14)
+```
+
+
+# Q is for Quantum (and tempo)
+
+```{r}
+dfc <- read_table(here("data", "CANtfrRRbo.txt"), skip = 2)
+dfc_long <- dfc %>% 
+  select(Year:TFR5p) %>% 
+  select(-TFR) %>% 
+  gather(measure, value, - Year) %>% 
+  mutate(parity = as.numeric(substr(measure, nchar(measure) , nchar(measure)))) %>% 
+  mutate(parity = ifelse(is.na(parity), 5, parity)) %>% 
+  select(-measure) %>% 
+  rename(tfr = value)
+
+dmac <- read_table(here("data", "CANmabRRbo.txt"), skip = 2)
+
+mab_tfr <- dmac %>% 
+  select(Year:MAB5p) %>% 
+  select(-MAB) %>% 
+  gather(measure, value, - Year) %>% 
+  mutate(parity = as.numeric(substr(measure, nchar(measure) , nchar(measure)))) %>% 
+  mutate(parity = ifelse(is.na(parity), 5, parity)) %>% 
+  select(-measure) %>% 
+  rename(mab = value) %>% 
+  left_join(dfc_long) 
+
+tfr_adj <- mab_tfr %>% 
+  mutate(diff_mab = (mab - lag(mab))/2,
+         tfr_dash = tfr/(1-diff_mab)) %>% 
+  group_by(Year) %>% 
+  summarise(unadjusted = sum(tfr),
+            tempo_adjusted = sum(tfr_dash)) 
+
+tfr_adj %>% 
+  gather(tfr, value, -Year) %>% 
+  ggplot(aes(Year, value, color = tfr)) + 
+  geom_line(lwd = 1.1) + 
+  labs(title = "TFR and tempo-adjusted TFR", subtitle = "Canada 1944-2011", caption = "Data from HFD") + 
+  theme_bw(base_size = 14)
+```
+
+# R is for r (the population growth rate)
+
+```{r}
+pop %>% 
+  filter(location %in% c("Nigeria", "Japan"), sex == "F") %>% 
+  group_by(year, location) %>% 
+  summarize(pop = sum(population)) %>% 
+  arrange(location, year) %>% 
+  group_by(location) %>% 
+  mutate(growth_rate = ((lead(pop) - pop)/pop)^1/5) %>% 
+  ggplot(aes(year, growth_rate, color = location)) + geom_line(lwd = 1.3)+
+  theme_bw(base_size = 14) +
+  scale_color_brewer(palette = "Set1", name = "Country") + 
+  ylab("growth rate")
+```
+
+
+# S is for Survivorship
+
+```{r}
+lt <- read_table("http://www.prdh.umontreal.ca/BDLC/data/ont/fltper_5x5.txt", skip = 2)
+lt <- lt %>% 
+  filter(Year=="2015-2016") %>% 
+  mutate(x = c(0,1,seq(5, 110, by = 5)),
+         n = lead(x, default = Inf)-x)
+lt %>% 
+  mutate(lx = lx/100000) %>% 
+  ggplot(aes(x, lx)) +
+  geom_line(lwd = 1.3) + 
+  xlab("age") + 
+  theme_bw(base_size = 14) + 
+  labs(title = "Survivorship for Ontario, 2015", caption = "data from the Canadian Human Mortality Database")
+```
+
+
+# T is for Total Fertility Rate
+
+```{r}
+
+df <- read_xlsx(here("data", "WPP2019_FERT_F07_AGE_SPECIFIC_FERTILITY.xlsx"), skip = 16)
+
+df <- df %>% 
+  rename(region = `Region, subregion, country or area *`, period = Period) %>% 
+  select(region, period, `15-19`:`45-49`) %>% 
+  pivot_longer(-(region:period), names_to = "age", values_to = "Fx") %>% 
+  mutate(year = as.numeric(substr(period, 1, 4)), 
+         age = as.numeric(substr(age, 1, 2)),
+         Fx = as.numeric(Fx)) %>% 
+  mutate(age = as.numeric(age), Fx = Fx/1000)
+df %>% 
+  group_by(region, year) %>% 
+  summarise(tfr = 5*sum(Fx)) %>% 
+  filter(region %in% c("Australia", "Nigeria", "Japan", "Indonesia", "India", "Kenya")) %>% 
+  ggplot(aes(year, tfr, color = region))  + 
+  geom_line(lwd = 1.1) +
+  scale_color_viridis_d()+
+  geom_hline(yintercept = 2.1) + 
+  theme_gray(base_size = 14) + 
+  labs(title = "Total fertility rate for selected countries, 1950-2015", caption = "Data from WPP 2019") + 
+  theme_bw(base_size = 14)
+```
+
+
+# U is for Uncertainty
+
+\vspace{10mm}
+\includegraphics[width = 1\textwidth]{fig/mortality_uncert.pdf}
+From Alexander, Zagheni and Barberi (2017)
+
+\newpage
+# V is for Vital registration systems
+
+\includegraphics[width = 1.2\textwidth]{fig/crvs.png}
+
+# W is for Weighted mean
+
+```{r}
+dmac %>% 
+  ggplot(aes(Year, MAB)) + geom_line(lwd = 1.3) + 
+  theme_bw(base_size = 14) + 
+  labs(title = "Mean age of childbearing, Canada", caption = "Data from HFD") + ylab("age")
+```
+
+
+# X is for $x$ (the age variable)
+
+\footnotesize
+```{r}
+lt %>%
+  filter(x<20) %>% 
+  select(x,n, lx, dx, ax, Lx, Tx, ex) %>% kable(booktabs = T,caption = 'Ontario life table (up to age 15), 2015 (Source: CHMD)') %>% 
+  kable_styling(latex_options = "hold_position")
+```
+
+
+# Y is for Year (period)
+
+```{r}
+lexis_grid(year_start = 1970, year_end = 2020, age_start = 0, age_end = 50, delta = 5) %>%
+  lexis_year(year = 1990, delta = 5, fill = "lightblue")
+```
+
+# Z is for Zero population growth
+
+```{r}
+pop %>% 
+  filter(location == "China", sex == "F") %>% 
+  group_by(year) %>% 
+  summarize(pop = sum(population)) %>% 
+  mutate(growth_rate = ((lead(pop) - pop)/pop)^1/5) %>% 
+  ggplot(aes(year, growth_rate)) + geom_line(lwd = 1.3)+
+  theme_bw(base_size = 14) + 
+  labs(title = "Annual growth rate, China female population", caption = "Data from WPP 2019") + ylab("growth rate")
+```
+
