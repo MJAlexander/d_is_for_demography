@@ -80,7 +80,7 @@ $$
 1 = \int e^{-ra}l(a)f(a)da
 $$
 
-# F is for fertility
+# F is for Fertility
 
 ```{r}
 pop_female <- readxl::read_xlsx(here("data/WPP2019_POP_F07_3_POPULATION_BY_AGE_FEMALE.xlsx"), sheet = 1, skip = 16)
