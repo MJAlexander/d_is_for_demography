@@ -1,1 +1,3 @@
-# d_is_for_demography
+# D is for Demography
+
+The beginnings of a demography alphabet book. 
