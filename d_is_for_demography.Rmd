@@ -126,7 +126,8 @@ ggplot(aes(x = age_group, y = proportion, fill = sex)) +
   scale_y_continuous(breaks = seq(-.1, .1, 0.05), 
                      labels = c(seq(.1, 0, -0.05), seq(0.05, .1, 0.05))) + 
   scale_fill_brewer(palette = "Set1") +
-  theme_bw(base_size = 14) 
+  theme_bw(base_size = 14) +
+  labs(caption = "Data from WPP 2019")
 ```
 
 # G is for Gompertz mortality
@@ -154,7 +155,7 @@ d_gomp %>%
   facet_wrap(~parameter, scales = "free_y") + 
   scale_color_brewer(palette = "Set1") + 
   theme_bw(base_size = 14)+
-  labs(title = "Gompertz parameters for Australian males", caption = "Data from HMD")
+  labs(title = "Gompertz parameters for Australians", caption = "Data from HMD")
 ```
 
 
@@ -356,7 +357,8 @@ df %>%
   ggplot(aes(year, NRR, color = region)) +
   geom_line(lwd = 1.3) + 
   theme_bw(base_size = 14)+
-  scale_color_viridis_d(name = "Country")
+  scale_color_viridis_d(name = "Country")+
+  labs(caption = "Data from WPP 2019")
 ```
 
 # O is for Old-age dependency ratio
@@ -451,7 +453,8 @@ pop %>%
   ggplot(aes(year, growth_rate, color = location)) + geom_line(lwd = 1.3)+
   theme_bw(base_size = 14) +
   scale_color_brewer(palette = "Set1", name = "Country") + 
-  ylab("growth rate")
+  ylab("growth rate")+
+  labs(caption = "Data from WPP 2019")
 ```
 
 
